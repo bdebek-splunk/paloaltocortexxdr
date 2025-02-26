@@ -1553,12 +1553,13 @@ class TestConnector(BaseConnector):
         action_results.add_data(results)
         return action_results.set_status(phantom.APP_SUCCESS)
     
-    def _get_query_results(self, action_result, query_id):
+    def _get_query_results(self, action_result, query_id, limit):
         self.save_progress(f"Obtaining status of XQL query with ID: {query_id}")
 
         parameters = {
             'query_id': query_id,
             "pending_flag": False,
+            "limit": limit,
             "format": "json"
         }
 
@@ -1572,8 +1573,9 @@ class TestConnector(BaseConnector):
         query_status = response.get('reply', {}).get('status')
         if query_status == "FAIL":
             return action_result.set_status(phantom.APP_ERROR, 'XQL Query failed')
+        number_of_results = response.get('reply', {}).get('number_of_results')
         # If number of results is more than 1000, fetch stream ID
-        if response.get('reply', {}).get('number_of_results') > 1000:
+        if number_of_results > 1000:
             self.save_progress("Query returned more than 1000 results. Fetching Stream ID.")
             stream_id = response.get('reply', {}).get('results').get('stream_id')
             results = self._get_stream_results(action_result, stream_id)
@@ -1584,11 +1586,7 @@ class TestConnector(BaseConnector):
         else:
             self.save_progress("Fetching query results")
             results = response.get('reply', {}).get('results').get('data')
-            action_result.add_data(results)
-            return action_result.set_status(phantom.APP_SUCCESS)
-
-
-
+            return results, number_of_results
 
     def _handle_make_xql_query(self, param):
         # use self.save_progress(...) to send progress messages back to the platform
@@ -1600,6 +1598,7 @@ class TestConnector(BaseConnector):
         query = param.get('query')
         time_from = param.get('time_from', datetime.now()-timedelta(days=1))
         time_to = param.get('time_to', datetime.now())
+        limit = param.get('limit', 100)
 
         headers = self.authenticationHeaders()
         parameters = {}
@@ -1628,13 +1627,12 @@ class TestConnector(BaseConnector):
             return action_result.set_status(phantom.APP_ERROR, 'Query ID not found in response')
         
         # Fetch query results
-        query_status = self._get_query_results(action_result, query_id)
-        if query_status == "SUCCESS":
-            self.save_progress("XQL Query completed successfully")
-        else:
-            return action_result.set_status(phantom.APP_ERROR, 'XQL Query failed')
+        query_results, number_of_results = self._get_query_results(action_result, query_id, limit)
+        action_result.add_data(query_results)
+        summary = action_result.update_summary({})
+        summary['total_count'] = number_of_results
 
-        pass
+        return action_result.set_status(phantom.APP_SUCCESS)
 
     def handle_action(self, param):
         ret_val = phantom.APP_SUCCESS

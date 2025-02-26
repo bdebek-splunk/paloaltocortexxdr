@@ -1952,6 +1952,109 @@
                 "type": "table"
             },
             "versions": "EQ(*)"
+        },
+        {
+            "action": "make xql query",
+            "description": "Make XQL query and fetch results",
+            "type": "investigate",
+            "identifier": "make_xql_query",
+            "read_only": true,
+            "parameters": {
+                "query": {
+                    "description": "XQL Query",
+                    "data_type": "string",
+                    "primary": true,
+                    "contains": [
+                        "cortex xql query"
+                    ],
+                    "order": 0
+                },
+                "time_from": {
+                    "description": "Start time for the results (defaults to now - 1 day)",
+                    "data_type": "numeric",
+                    "order": 1
+                },
+                "time_to": {
+                    "description": "End time for the results (defaults to now)",
+                    "data_type": "numeric",
+                    "order": 2
+                },
+                "limit": {
+                    "description": "Limit of results to be fetched (defaults to 100)",
+                    "data_type": "numeric",
+                    "order": 3
+                }
+            },
+            "output": [
+                {
+                    "data_path": "action_result.status",
+                    "data_type": "string",
+                    "column_name": "Status",
+                    "column_order": 9,
+                    "example_values": [
+                        "success",
+                        "failed"
+                    ]
+                },
+                {
+                    "data_path": "action_result.parameter.query",
+                    "data_type": "string",
+                    "column_name": "XQL Query",
+                    "column_order": 0
+                },
+                {
+                    "data_path": "action_result.parameter.limit",
+                    "data_type": "numeric",
+                    "column_name": "Limit",
+                    "column_order": 1
+                },
+                {
+                    "data_path": "action_result.parameter.time_from",
+                    "data_type": "numeric",
+                    "column_name": "Time From",
+                    "column_order": 2
+                },
+                {
+                    "data_path": "action_result.parameter.time_to",
+                    "data_type": "numeric",
+                    "column_name": "Time To",
+                    "column_order": 3
+                },
+                {
+                    "data_path": "action_result.summary.total_count",
+                    "data_type": "numeric"
+                },
+                {
+                    "data_path": "action_result.data",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.summary",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.message",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "summary.total_objects",
+                    "data_type": "numeric",
+                    "example_values": [
+                        1
+                    ]
+                },
+                {
+                    "data_path": "summary.total_objects_successful",
+                    "data_type": "numeric",
+                    "example_values": [
+                        1
+                    ]
+                }
+            ],
+            "render": {
+                "type": "table"
+            },
+            "versions": "EQ(*)"
         }
     ],
     "pip_dependencies": {
