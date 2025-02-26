@@ -21,6 +21,7 @@ import json
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
+import time
 
 # Phantom App imports
 import phantom.app as phantom
@@ -1524,6 +1525,116 @@ class TestConnector(BaseConnector):
         # Return success, no need to set the message, only the status
         # BaseConnector will create a textual message based off of the summary dictionary
         return action_result.set_status(phantom.APP_SUCCESS)
+    
+    def _get_stream_results(self, action_results, stream_id):
+        self.save_progress(f"Obtaining stream results with ID: {stream_id}")
+
+        headers = {
+            "'Accept-Encoding: gzip' : " "": "",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        parameters = {
+            'request_data': {
+                'stream_id': stream_id,
+                'is_gzip_compressed': 'true'
+            }
+            
+        }
+        # Make stream results call
+        ret_val, response = self._make_rest_call(
+            f'/xql/get_query_results_stream/', action_results, headers=headers, json=parameters
+        )
+        if phantom.is_fail(ret_val):
+            # the call to the 3rd party device or service failed, action result should contain all the error details
+            return action_results.get_status()
+        results = response.json()
+        self.debug_print(f"RESULTS: {results}")
+        action_results.add_data(results)
+        return action_results.set_status(phantom.APP_SUCCESS)
+    
+    def _get_query_results(self, action_result, query_id):
+        self.save_progress(f"Obtaining status of XQL query with ID: {query_id}")
+
+        parameters = {
+            'query_id': query_id,
+            "pending_flag": False,
+            "format": "json"
+        }
+
+        # Make query results call
+        ret_val, response = self._make_rest_call(
+            f'/xql/get_query_status/', action_result, json=parameters
+        )
+        if phantom.is_fail(ret_val):
+            # the call to the 3rd party device or service failed, action result should contain all the error details
+            return action_result.get_status()
+        query_status = response.get('reply', {}).get('status')
+        if query_status == "FAIL":
+            return action_result.set_status(phantom.APP_ERROR, 'XQL Query failed')
+        # If number of results is more than 1000, fetch stream ID
+        if response.get('reply', {}).get('number_of_results') > 1000:
+            self.save_progress("Query returned more than 1000 results. Fetching Stream ID.")
+            stream_id = response.get('reply', {}).get('results').get('stream_id')
+            results = self._get_stream_results(action_result, stream_id)
+            if results:
+                return results
+            else:
+                return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch results')
+        else:
+            self.save_progress("Fetching query results")
+            results = response.get('reply', {}).get('results').get('data')
+            action_result.add_data(results)
+            return action_result.set_status(phantom.APP_SUCCESS)
+
+
+
+
+    def _handle_make_xql_query(self, param):
+        # use self.save_progress(...) to send progress messages back to the platform
+        self.save_progress("In action handler for: {0}".format(self.get_action_identifier()))
+
+        # Add an action result object to self (BaseConnector) to represent the action for this param
+        action_result = self.add_action_result(ActionResult(dict(param)))
+
+        query = param.get('query')
+        time_from = param.get('time_from', datetime.now()-timedelta(days=1))
+        time_to = param.get('time_to', datetime.now())
+
+        headers = self.authenticationHeaders()
+        parameters = {}
+        if query:
+            parameters['query'] = query
+        parameters['timeframe'] = {
+            'from': time_from,
+            'to': time_to
+        }
+        self.debug_print("Request JSON: {0}".format(parameters))
+
+        ret_val, response = self._make_rest_call(
+            '/xql/start_xql_query/', action_result, headers=headers, json=parameters
+        )
+
+        if phantom.is_fail(ret_val):
+            # the call to the 3rd party device or service failed, action result should contain all the error details
+            return action_result.get_status()
+
+        # Add the response into the data section
+        self.save_progress("Response JSON: {0}".format(response))
+
+        # Fetch query ID from response
+        query_id = response.get('reply', {}).get('query_id')
+        if not query_id:
+            return action_result.set_status(phantom.APP_ERROR, 'Query ID not found in response')
+        
+        # Fetch query results
+        query_status = self._get_query_results(action_result, query_id)
+        if query_status == "SUCCESS":
+            self.save_progress("XQL Query completed successfully")
+        else:
+            return action_result.set_status(phantom.APP_ERROR, 'XQL Query failed')
+
+        pass
 
     def handle_action(self, param):
         ret_val = phantom.APP_SUCCESS
@@ -1586,6 +1697,9 @@ class TestConnector(BaseConnector):
 
         elif action_id == 'get_alerts':
             ret_val = self._handle_get_alerts(param)
+
+        elif action_id == 'make_xql_query':
+            ret_val = self._handle_make_xql_query(param)
 
         return ret_val
 
