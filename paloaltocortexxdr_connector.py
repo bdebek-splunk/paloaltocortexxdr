@@ -191,7 +191,6 @@ class TestConnector(BaseConnector):
                         with gzip.GzipFile(fileobj=compressed_data) as gzip_file:
                             decompressed_data = gzip_file.read()
                             decompressed_data = decompressed_data.decode('utf-8')
-                            self.debug_print("Decompressed content: {0}".format(decompressed_data))
                             json_strings = decompressed_data.strip().split('\n')
                             # Parse the JSON data
                             parsed_json = [json.loads(json_str) for json_str in json_strings]
@@ -230,7 +229,6 @@ class TestConnector(BaseConnector):
         url = "{0}{1}".format(self._base_url, endpoint)
 
         try:
-            self.debug_print(f"Making request to {url}, kwargs: {kwargs}")
             r = request_func(
                 url,
                 verify=self._verify,
@@ -1576,7 +1574,6 @@ class TestConnector(BaseConnector):
         if phantom.is_fail(ret_val):
             # the call to the 3rd party device or service failed, action result should contain all the error details
             return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch stream results')
-        self.debug_print(f"STREAM RESULTS: {response}")
         return response
     
     def _get_query_results(self, action_result, query_id):
@@ -1600,11 +1597,9 @@ class TestConnector(BaseConnector):
         ret_val, response = self._make_rest_call(
             f'/xql/get_query_results/', action_result, data=json.dumps(payload), headers=headers
         )
-        self.debug_print(f"QUERY STATUS RESPONSE1: {ret_val, response}")
         if phantom.is_fail(ret_val):
             # the call to the 3rd party device or service failed, action result should contain all the error details
             return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch results from XQL query')
-        self.debug_print(f"QUERY STATUS RESPONSE2: {response}")
         query_status = response.get('reply', {}).get('status')
         if query_status == "FAIL":
             return action_result.set_status(phantom.APP_ERROR, 'XQL Query failed')
@@ -1673,7 +1668,6 @@ class TestConnector(BaseConnector):
         query_results = self._get_query_results(action_result, query_id)
         if not query_results:
             return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch results')
-        self.debug_print(f"QUERY RESULTS: {query_results}")
         action_result.add_data(query_results)
         summary = action_result.update_summary({})
         total_count = len(query_results)
