@@ -39,6 +39,7 @@ VARIABLE | REQUIRED | TYPE | DESCRIPTION
 [get incidents](#action-get-incidents) - Get a list of incidents filtered by a list of incident IDs, modification time, or creation time  
 [get incident details](#action-get-incident-details) - Get extra data fields of a specific incident including alerts and key artifacts  
 [get alerts](#action-get-alerts) - Get a list of alerts with multiple events  
+[make xql query](#action-make-xql-query) - Make XQL query and fetch results  
 
 ## action: 'on poll'
 Callback action for the on_poll ingest functionality
@@ -522,6 +523,35 @@ action_result.parameter.severity | string |  |
 action_result.parameter.sort | boolean |  |   True  False 
 action_result.parameter.sort_field | string |  |  
 action_result.parameter.sort_order | string |  |  
+action_result.data | string |  |  
+action_result.summary | string |  |  
+action_result.message | string |  |  
+summary.total_objects | numeric |  |   1 
+summary.total_objects_successful | numeric |  |   1   
+
+## action: 'make xql query'
+Make XQL query and fetch results
+
+Type: **investigate**  
+Read only: **True**
+
+#### Action Parameters
+PARAMETER | REQUIRED | DESCRIPTION | TYPE | CONTAINS
+--------- | -------- | ----------- | ---- | --------
+**query** |  required  | XQL Query | string |  `cortex xql query` 
+**time_from** |  optional  | Start time for the results (Unix timestamp e.g. 1598907600000) | numeric | 
+**time_to** |  optional  | End time for the results (Unix timestamp e.g 1599080399000) | numeric | 
+**relative_time** |  optional  | Relative time for the results (Unix timestamp representing timeframe e.g the last 24 hours = 86400000) | numeric | 
+
+#### Action Output
+DATA PATH | TYPE | CONTAINS | EXAMPLE VALUES
+--------- | ---- | -------- | --------------
+action_result.status | string |  |   success  failed 
+action_result.parameter.query | string |  |  
+action_result.parameter.limit | numeric |  |  
+action_result.parameter.time_from | numeric |  |  
+action_result.parameter.time_to | numeric |  |  
+action_result.summary.total_count | numeric |  |  
 action_result.data | string |  |  
 action_result.summary | string |  |  
 action_result.message | string |  |  

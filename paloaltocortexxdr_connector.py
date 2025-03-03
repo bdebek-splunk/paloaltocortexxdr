@@ -22,6 +22,9 @@ import secrets
 import string
 from datetime import datetime, timedelta, timezone
 import time
+import gzip
+import io
+import codecs
 
 # Phantom App imports
 import phantom.app as phantom
@@ -173,6 +176,31 @@ class TestConnector(BaseConnector):
         # the error and adds it to the action_result.
         if 'html' in r.headers.get('Content-Type', ''):
             return self._process_html_response(r, action_result)
+        
+        if "octet-stream" in r.headers.get('Content-Type', ''):
+            self.debug_print("Processing octet-stream response")
+            try:
+                if 'Content-Disposition' in r.headers:
+                    action_result.add_debug_data({'r_content': r.content})
+                    # Check if the attachment is a JSON file
+                    content_disposition = r.headers['Content-Disposition']
+                    if 'attachment' in content_disposition and content_disposition.endswith('.json'):
+                        # Read and decode the content
+                        self.debug_print("Decoding the content")
+                        compressed_data = io.BytesIO(r.content)
+                        with gzip.GzipFile(fileobj=compressed_data) as gzip_file:
+                            decompressed_data = gzip_file.read()
+                            decompressed_data = decompressed_data.decode('utf-8')
+                            self.debug_print("Decompressed content: {0}".format(decompressed_data))
+                            json_strings = decompressed_data.strip().split('\n')
+                            # Parse the JSON data
+                            parsed_json = [json.loads(json_str) for json_str in json_strings]
+                            return RetVal(phantom.APP_SUCCESS, parsed_json)
+            except Exception as e:
+                err = self._get_error_message_from_exception(e)
+                error_message = "Unable to parse JSON response. Error: {0}".format(err)
+                return RetVal(action_result.set_status(phantom.APP_ERROR, error_message), None)
+
 
         # it's not content-type that is to be parsed, handle an empty response
         if not r.text:
@@ -202,6 +230,7 @@ class TestConnector(BaseConnector):
         url = "{0}{1}".format(self._base_url, endpoint)
 
         try:
+            self.debug_print(f"Making request to {url}, kwargs: {kwargs}")
             r = request_func(
                 url,
                 verify=self._verify,
@@ -1526,54 +1555,61 @@ class TestConnector(BaseConnector):
         # BaseConnector will create a textual message based off of the summary dictionary
         return action_result.set_status(phantom.APP_SUCCESS)
     
-    def _get_stream_results(self, action_results, stream_id):
+    def _get_stream_results(self, action_result, stream_id):
         self.save_progress(f"Obtaining stream results with ID: {stream_id}")
-
-        headers = {
-            "'Accept-Encoding: gzip' : " "": "",
+        headers = self.authenticationHeaders()
+        headers.update({
+            "Accept-Encoding": "gzip",
             "Content-Type": "application/json",
             "Accept": "application/json"
-        }
+        })
         parameters = {
             'request_data': {
                 'stream_id': stream_id,
-                'is_gzip_compressed': 'true'
+                'is_gzip_compressed': True
             }
-            
         }
         # Make stream results call
         ret_val, response = self._make_rest_call(
-            f'/xql/get_query_results_stream/', action_results, headers=headers, json=parameters
+            f'/xql/get_query_results_stream/', action_result, headers=headers, data=json.dumps(parameters), stream=True
         )
         if phantom.is_fail(ret_val):
             # the call to the 3rd party device or service failed, action result should contain all the error details
-            return action_results.get_status()
-        results = response.json()
-        self.debug_print(f"RESULTS: {results}")
-        action_results.add_data(results)
-        return action_results.set_status(phantom.APP_SUCCESS)
+            return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch stream results')
+        self.debug_print(f"STREAM RESULTS: {response}")
+        return response
     
-    def _get_query_results(self, action_result, query_id, limit):
+    def _get_query_results(self, action_result, query_id):
         self.save_progress(f"Obtaining status of XQL query with ID: {query_id}")
 
-        parameters = {
-            'query_id': query_id,
-            "pending_flag": False,
-            "limit": limit,
-            "format": "json"
+        payload = {
+            "request_data": {
+                'query_id': query_id,
+                "pending_flag": False,
+                "format": "json"
+            }
         }
+        headers = self.authenticationHeaders()
+        headers.update({
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            'Accept-Encoding': "",
+        })
 
         # Make query results call
         ret_val, response = self._make_rest_call(
-            f'/xql/get_query_status/', action_result, json=parameters
+            f'/xql/get_query_results/', action_result, data=json.dumps(payload), headers=headers
         )
+        self.debug_print(f"QUERY STATUS RESPONSE1: {ret_val, response}")
         if phantom.is_fail(ret_val):
             # the call to the 3rd party device or service failed, action result should contain all the error details
-            return action_result.get_status()
+            return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch results from XQL query')
+        self.debug_print(f"QUERY STATUS RESPONSE2: {response}")
         query_status = response.get('reply', {}).get('status')
         if query_status == "FAIL":
             return action_result.set_status(phantom.APP_ERROR, 'XQL Query failed')
         number_of_results = response.get('reply', {}).get('number_of_results')
+        self.debug_print(f"Number of results: {number_of_results}")
         # If number of results is more than 1000, fetch stream ID
         if number_of_results > 1000:
             self.save_progress("Query returned more than 1000 results. Fetching Stream ID.")
@@ -1586,7 +1622,7 @@ class TestConnector(BaseConnector):
         else:
             self.save_progress("Fetching query results")
             results = response.get('reply', {}).get('results').get('data')
-            return results, number_of_results
+            return results
 
     def _handle_make_xql_query(self, param):
         # use self.save_progress(...) to send progress messages back to the platform
@@ -1595,19 +1631,26 @@ class TestConnector(BaseConnector):
         # Add an action result object to self (BaseConnector) to represent the action for this param
         action_result = self.add_action_result(ActionResult(dict(param)))
 
-        query = param.get('query')
-        time_from = param.get('time_from', datetime.now()-timedelta(days=1))
-        time_to = param.get('time_to', datetime.now())
-        limit = param.get('limit', 100)
+        query = param.get('query').replace('\n', ' ')
+        time_from = param.get('time_from')
+        time_to = param.get('time_to')
+        relative_time = param.get('relative_time')
 
         headers = self.authenticationHeaders()
         parameters = {}
+        request_data = {}
         if query:
-            parameters['query'] = query
-        parameters['timeframe'] = {
-            'from': time_from,
-            'to': time_to
-        }
+            request_data['query'] = query
+        if time_from and time_to:
+            request_data['timeframe'] = {
+                'from': time_from,
+                'to': time_to
+            }
+        elif relative_time:
+            request_data['relative_time'] = relative_time
+
+        parameters['request_data'] = request_data
+
         self.debug_print("Request JSON: {0}".format(parameters))
 
         ret_val, response = self._make_rest_call(
@@ -1616,21 +1659,25 @@ class TestConnector(BaseConnector):
 
         if phantom.is_fail(ret_val):
             # the call to the 3rd party device or service failed, action result should contain all the error details
-            return action_result.get_status()
+            return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch results')
 
         # Add the response into the data section
         self.save_progress("Response JSON: {0}".format(response))
 
         # Fetch query ID from response
-        query_id = response.get('reply', {}).get('query_id')
+        query_id = response.get('reply', '')
         if not query_id:
             return action_result.set_status(phantom.APP_ERROR, 'Query ID not found in response')
         
         # Fetch query results
-        query_results, number_of_results = self._get_query_results(action_result, query_id, limit)
+        query_results = self._get_query_results(action_result, query_id)
+        if not query_results:
+            return action_result.set_status(phantom.APP_ERROR, 'Failed to fetch results')
+        self.debug_print(f"QUERY RESULTS: {query_results}")
         action_result.add_data(query_results)
         summary = action_result.update_summary({})
-        summary['total_count'] = number_of_results
+        total_count = len(query_results)
+        summary['total_count'] = total_count
 
         return action_result.set_status(phantom.APP_SUCCESS)
 

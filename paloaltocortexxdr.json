@@ -12,7 +12,7 @@
     "product_version_regex": ".*",
     "publisher": "Cyberforce Limited",
     "license": "Copyright (c) Cyberforce Limited, 2021-2023",
-    "app_version": "1.2.0",
+    "app_version": "1.2.1",
     "utctime_updated": "2022-01-07T22:06:49.000000Z",
     "package_name": "phantom_paloaltocortexxdr",
     "main_module": "paloaltocortexxdr_connector.py",
@@ -1967,22 +1967,26 @@
                     "contains": [
                         "cortex xql query"
                     ],
-                    "order": 0
+                    "order": 0,
+                    "required": true
                 },
                 "time_from": {
-                    "description": "Start time for the results (defaults to now - 1 day)",
+                    "description": "Start time for the results (Unix timestamp e.g. 1598907600000)",
                     "data_type": "numeric",
-                    "order": 1
+                    "order": 1,
+                    "required": false
                 },
                 "time_to": {
-                    "description": "End time for the results (defaults to now)",
+                    "description": "End time for the results (Unix timestamp e.g 1599080399000)",
                     "data_type": "numeric",
-                    "order": 2
+                    "order": 2,
+                    "required": false
                 },
-                "limit": {
-                    "description": "Limit of results to be fetched (defaults to 100)",
+                "relative_time":{
+                    "description": "Relative time for the results (Unix timestamp representing timeframe e.g the last 24 hours = 86400000)",
                     "data_type": "numeric",
-                    "order": 3
+                    "order": 3,
+                    "required": false
                 }
             },
             "output": [
@@ -2003,21 +2007,21 @@
                     "column_order": 0
                 },
                 {
-                    "data_path": "action_result.parameter.limit",
-                    "data_type": "numeric",
-                    "column_name": "Limit",
-                    "column_order": 1
-                },
-                {
                     "data_path": "action_result.parameter.time_from",
                     "data_type": "numeric",
                     "column_name": "Time From",
-                    "column_order": 2
+                    "column_order": 1
                 },
                 {
                     "data_path": "action_result.parameter.time_to",
                     "data_type": "numeric",
                     "column_name": "Time To",
+                    "column_order": 2
+                },
+                {
+                    "data_path": "action_result.parameter.relative_time",
+                    "data_type": "numeric",
+                    "column_name": "Relative Time",
                     "column_order": 3
                 },
                 {
@@ -2117,7 +2121,7 @@
             },
             {
                 "module": "urllib3",
-                "input_file": "wheels/py3/urllib3-2.0.2-py3-none-any.whl"
+                "input_file": "wheels/py3/urllib3-1.26.20-py2.py3-none-any.whl"
             }
         ]
     }
